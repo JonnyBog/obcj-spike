@@ -13,7 +13,6 @@ type ConnectionType = "affordability" | "offers";
 type Step = "benefits" | "foo" | "banks";
 
 interface Journey {
-  journeyId: string;
   connectionType: ConnectionType;
   step: Step;
 }
@@ -24,10 +23,12 @@ const getObfsConnectionJourneys = (): Journey[] => {
   ) as Journey[];
 };
 
-const getJourney = (journeyId?: string): Journey | undefined => {
+const getJourney = (connectionType?: ConnectionType): Journey | undefined => {
   const obfsConnectionJourneys = getObfsConnectionJourneys();
 
-  const journey = obfsConnectionJourneys.find((j) => j.journeyId === journeyId);
+  const journey = obfsConnectionJourneys.find(
+    (j) => j.connectionType === connectionType
+  );
 
   return journey;
 };
@@ -35,10 +36,10 @@ const getJourney = (journeyId?: string): Journey | undefined => {
 const setJourney = (journeyToSet: Journey) => {
   const obfsConnectionJourneys = getObfsConnectionJourneys();
 
-  const existingJourney = getJourney(journeyToSet.journeyId);
+  const existingJourney = getJourney(journeyToSet.connectionType);
   const newJourneys = existingJourney
     ? obfsConnectionJourneys.map((journey) => {
-        if (journey.journeyId === journeyToSet.journeyId) {
+        if (journey.connectionType === journeyToSet.connectionType) {
           return journeyToSet;
         }
 
@@ -67,7 +68,6 @@ const getFirstStep = (connectionType: ConnectionType): Step => {
 const KafkaCrazyService = {
   initialiseJourney: (connectionType: ConnectionType, step: Step): Journey => {
     const journey = {
-      journeyId: `${Math.floor(Math.random() * 1000000000)}`,
       connectionType: connectionType,
       step,
     };
@@ -76,8 +76,8 @@ const KafkaCrazyService = {
 
     return journey;
   },
-  setStep: (journeyId: string, step: Step) => {
-    const journey = getJourney(journeyId);
+  setStep: (connectionType: ConnectionType, step: Step) => {
+    const journey = getJourney(connectionType);
 
     if (journey) {
       setJourney({ ...journey, step });
@@ -104,7 +104,7 @@ const ObfsService = {
     return journey;
   },
   getBenefits: (
-    journeyId?: string
+    connectionType?: ConnectionType
   ):
     | {
         title: string;
@@ -115,17 +115,17 @@ const ObfsService = {
         };
       }
     | undefined => {
-    if (!journeyId) return undefined;
-    const journey = getJourney(journeyId);
+    if (!connectionType) return undefined;
+    const journey = getJourney(connectionType);
     if (!journey) return undefined;
-    KafkaCrazyService.setStep(journeyId, "benefits");
+    KafkaCrazyService.setStep(connectionType, "benefits");
 
     const affordabilityBenefits = {
       title: "Affordability",
       description: "Affordability report is so sweeeeeet",
       cta: {
         title: "Go to banks",
-        link: `/open-banking/connection/${journeyId}/banks`,
+        link: `/open-banking/connection/${connectionType}/banks`,
       },
     };
 
@@ -134,7 +134,7 @@ const ObfsService = {
       description: "Offers are a-mazing",
       cta: {
         title: "Go to banks",
-        link: `/open-banking/connection/${journeyId}/banks`,
+        link: `/open-banking/connection/${connectionType}/banks`,
       },
     };
 
@@ -146,34 +146,34 @@ const ObfsService = {
       return offersBenefits;
     }
   },
-  getBanks: (journeyId?: string) => {
-    if (!journeyId) return undefined;
-    KafkaCrazyService.setStep(journeyId, "banks");
+  getBanks: (connectionType?: ConnectionType) => {
+    if (!connectionType) return undefined;
+    KafkaCrazyService.setStep(connectionType, "banks");
 
     return {
       title: "Here is a list of banks",
       list: [
         {
           name: "HSBC",
-          link: `/open-banking/connection/${journeyId}/banks`,
+          link: `/open-banking/connection/${connectionType}/banks`,
         },
         {
           name: "RBS",
-          link: `/open-banking/connection/${journeyId}/banks`,
+          link: `/open-banking/connection/${connectionType}/banks`,
         },
       ],
     };
   },
-  getFoo: (journeyId?: string) => {
-    if (!journeyId) return undefined;
-    KafkaCrazyService.setStep(journeyId, "foo");
+  getFoo: (connectionType?: ConnectionType) => {
+    if (!connectionType) return undefined;
+    KafkaCrazyService.setStep(connectionType, "foo");
 
     return {
       title: "Foo",
       description: "Whoa, this is new.",
       cta: {
         title: "Go to benefits",
-        link: `/open-banking/connection/${journeyId}/benefits`,
+        link: `/open-banking/connection/${connectionType}/benefits`,
       },
     };
   },
@@ -198,12 +198,12 @@ const Home = () => {
       {obfsConnectionJourneys.length ? (
         <div>
           {obfsConnectionJourneys.map((journey) => (
-            <p key={journey.journeyId}>
+            <p key={journey.connectionType}>
               You have a <strong>{journey.connectionType}</strong> journey that
               you left at step <strong>{journey.step}</strong>
               <br />
               <Link
-                to={`/open-banking/connection/${journey.journeyId}/${journey.step}`}
+                to={`/open-banking/connection/${journey.connectionType}/${journey.step}`}
               >
                 Get back to it!
               </Link>
@@ -219,13 +219,15 @@ const ObcjInitial = () => {
   const { connectionType } = useParams<{ connectionType: ConnectionType }>();
   const navigate = useNavigate();
 
-  const { journeyId, step } = ObfsService.initialiseJourney(
+  const journey = ObfsService.initialiseJourney(
     connectionType || "affordability"
   );
 
   useEffect(() => {
-    navigate(`/open-banking/connection/${journeyId}/${step}`);
-  }, [navigate, journeyId, step]);
+    navigate(
+      `/open-banking/connection/${journey.connectionType}/${journey.step}`
+    );
+  }, [navigate, journey.connectionType, journey.step]);
 
   return <div>loading...</div>;
 };
@@ -241,8 +243,10 @@ const useNoContent = (content: unknown) => {
 };
 
 const ObcjBenefits = () => {
-  const { journeyId } = useParams();
-  const benefits = ObfsService.getBenefits(journeyId);
+  const { connectionType } = useParams<{
+    connectionType: ConnectionType;
+  }>();
+  const benefits = ObfsService.getBenefits(connectionType);
   useNoContent(benefits);
 
   if (!benefits) {
@@ -260,8 +264,10 @@ const ObcjBenefits = () => {
 };
 
 const ObcjBanks = () => {
-  const { journeyId } = useParams();
-  const banks = ObfsService.getBanks(journeyId);
+  const { connectionType } = useParams<{
+    connectionType: ConnectionType;
+  }>();
+  const banks = ObfsService.getBanks(connectionType);
   useNoContent(banks);
 
   if (!banks) {
@@ -284,8 +290,10 @@ const ObcjBanks = () => {
 };
 
 const ObcjFoo = () => {
-  const { journeyId } = useParams();
-  const foo = ObfsService.getFoo(journeyId);
+  const { connectionType } = useParams<{
+    connectionType: ConnectionType;
+  }>();
+  const foo = ObfsService.getFoo(connectionType);
   useNoContent(foo);
 
   if (!foo) {
@@ -313,15 +321,15 @@ function App() {
       element: <ObcjInitial />,
     },
     {
-      path: "open-banking/connection/:journeyId/benefits",
+      path: "open-banking/connection/:connectionType/benefits",
       element: <ObcjBenefits />,
     },
     {
-      path: "open-banking/connection/:journeyId/foo",
+      path: "open-banking/connection/:connectionType/foo",
       element: <ObcjFoo />,
     },
     {
-      path: "open-banking/connection/:journeyId/banks",
+      path: "open-banking/connection/:connectionType/banks",
       element: <ObcjBanks />,
     },
   ]);
